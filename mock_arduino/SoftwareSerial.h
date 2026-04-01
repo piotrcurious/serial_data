@@ -16,6 +16,10 @@ public:
         buffer.pop_front();
         return val;
     }
+    int peek() override {
+        if (buffer.empty()) return -1;
+        return buffer.front();
+    }
     size_t readBytes(uint8_t* buf, size_t len) override {
         size_t count = 0;
         while (count < len && !buffer.empty()) {

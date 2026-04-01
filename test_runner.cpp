@@ -64,8 +64,60 @@ void test_error_correction() {
     }
 }
 
+void test_sync_loss() {
+    std::cout << "--- Synchronization Loss Test ---" << std::endl;
+    SoftwareSerial::buffer.clear();
+    SerialPacket packetHandler(mySerial);
+    byte type = 0x01;
+    byte data = 0x42;
+
+    // Inject a junk byte to misalign the stream
+    SoftwareSerial::buffer.push_back(0xFF);
+
+    packetHandler.sendPacket(type, data);
+    std::cout << "Sent junk byte + valid packet. Buffer size: " << SoftwareSerial::buffer.size() << std::endl;
+
+    byte receivedType, receivedData;
+    if (packetHandler.receivePacket(receivedType, receivedData)) {
+        std::cout << "Packet received! Type: " << (int)receivedType << ", Data: " << (int)receivedData << std::endl;
+        if (receivedType == type && receivedData == data) {
+            std::cout << "SUCCESS: Recovered from synchronization loss." << std::endl;
+        } else {
+            std::cout << "FAILURE: Data mismatch." << std::endl;
+        }
+    } else {
+        std::cout << "FAILURE: Could not recover from synchronization loss." << std::endl;
+    }
+}
+
+void test_int_data() {
+    std::cout << "--- Int Data Test ---" << std::endl;
+    SoftwareSerial::buffer.clear();
+    SerialPacket packetHandler(mySerial);
+    byte type = 0x02;
+    int data = 12345;
+
+    packetHandler.sendInt(type, data);
+    std::cout << "Sent int. Buffer size: " << SoftwareSerial::buffer.size() << std::endl;
+
+    byte receivedType;
+    int receivedValue;
+    if (packetHandler.receiveInt(receivedType, receivedValue)) {
+        std::cout << "Int received! Type: " << (int)receivedType << ", Value: " << receivedValue << std::endl;
+        if (receivedType == type && receivedValue == data) {
+            std::cout << "SUCCESS" << std::endl;
+        } else {
+            std::cout << "FAILURE: mismatch" << std::endl;
+        }
+    } else {
+        std::cout << "FAILURE: not received" << std::endl;
+    }
+}
+
 int main() {
     test_basic();
     test_error_correction();
+    test_sync_loss();
+    test_int_data();
     return 0;
 }
