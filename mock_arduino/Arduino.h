@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stddef.h>
+#include <chrono>
 
 typedef uint8_t byte;
 
@@ -22,6 +23,9 @@ void digitalWrite(uint8_t pin, uint8_t val);
 int digitalRead(uint8_t pin);
 void delay(unsigned long ms);
 long random(long min, long max);
+
+unsigned long millis();
+unsigned long micros();
 
 class Stream {
 public:

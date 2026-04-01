@@ -32,7 +32,6 @@ bool SerialPacket::receivePacket(byte& type, byte& data) {
         }
 
         if (syncBufferCount == ENCODED_PACKET_SIZE) {
-            // Try to decode
             byte raw[RAW_PACKET_SIZE];
             for (int i = 0; i < RAW_PACKET_SIZE; i++) {
                 raw[i] = (hammingDecode(syncBuffer[i * 2]) << 4) | hammingDecode(syncBuffer[i * 2 + 1]);
@@ -41,10 +40,9 @@ bool SerialPacket::receivePacket(byte& type, byte& data) {
             if ((raw[0] ^ raw[1]) == raw[2]) {
                 type = raw[0];
                 data = raw[1];
-                syncBufferCount = 0; // Reset for next packet
+                syncBufferCount = 0;
                 return true;
             } else {
-                // Invalid packet, shift buffer by 1 and try again
                 for (int i = 0; i < ENCODED_PACKET_SIZE - 1; i++) {
                     syncBuffer[i] = syncBuffer[i+1];
                 }
@@ -56,22 +54,29 @@ bool SerialPacket::receivePacket(byte& type, byte& data) {
 }
 
 void SerialPacket::sendInt(byte type, int value) {
-    // Send 16-bit integer as two 8-bit packets
-    // High byte first
     sendPacket(type, (byte)((value >> 8) & 0xFF));
     sendPacket(type, (byte)(value & 0xFF));
 }
 
 bool SerialPacket::receiveInt(byte& type, int& value) {
     byte t1, t2, d1, d2;
-    // This is naive; it assumes two packets for the same 'type' are in order.
-    // A more robust way would be to have sub-types or sequence numbers.
-    // For now, let's keep it simple.
+    unsigned long start = millis();
+
+    // Attempt to receive the first packet
     if (receivePacket(t1, d1)) {
-        if (receivePacket(t2, d2) && t1 == t2) {
-            type = t1;
-            value = (int)((d1 << 8) | d2);
-            return true;
+        // Wait up to 50ms for the second packet of the same type
+        while (millis() - start < 50) {
+            if (receivePacket(t2, d2)) {
+                if (t1 == t2) {
+                    type = t1;
+                    value = (int)((d1 << 8) | d2);
+                    return true;
+                } else {
+                    // Mismatched packet; could be another command.
+                    // This is still not perfect but better.
+                    return false;
+                }
+            }
         }
     }
     return false;

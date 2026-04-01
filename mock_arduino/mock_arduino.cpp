@@ -19,3 +19,15 @@ long random(long min, long max) {
     std::uniform_int_distribution<long> dist(min, max - 1);
     return dist(rng);
 }
+
+static auto start_time = std::chrono::steady_clock::now();
+
+unsigned long millis() {
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
+}
+
+unsigned long micros() {
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::microseconds>(now - start_time).count();
+}
