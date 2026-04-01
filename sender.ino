@@ -3,9 +3,12 @@
 
 // Include the SerialPacket library
 #include <SerialPacket.h>
+#include <SoftwareSerial.h>
+
+SoftwareSerial mySerial(10, 11);
 
 // Create a SerialPacket object
-SerialPacket serialPacket;
+SerialPacket serialPacket(mySerial);
 
 // Define the pin for the LED
 #define LED_PIN 13
@@ -26,6 +29,7 @@ int telemetryData = 0;
 
 // Setup function
 void setup() {
+  mySerial.begin(9600);
   // Initialize the LED pin as output
   pinMode(LED_PIN, OUTPUT);
 
@@ -50,7 +54,7 @@ void loop() {
   telemetryData += random(10, 100);
 
   // Send a data packet with the telemetry data
-  serialPacket.sendPacket(DATA_PACKET, telemetryData);
+  serialPacket.sendPacket(DATA_PACKET, (byte)(telemetryData & 0xFF));
 
   // Print a message to the serial monitor
   Serial.print("Sent data: ");
