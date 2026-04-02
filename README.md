@@ -6,6 +6,7 @@ A robust Arduino library for serial data communication with Hamming(7,4) error c
 
 - **Error Correction**: Uses Hamming(7,4) code to detect and correct single-bit errors in every nibble.
 - **Packet Synchronization**: Automatically recovers from stream offsets using a sliding-window buffer.
+- **Interleaved Packet Support**: Handled via an internal packet cache, allowing multi-byte data (like `int`) to be received even if other packets are interleaved.
 - **Dependency Injection**: Works with any `Stream` implementation (HardwareSerial, SoftwareSerial, etc.).
 - **Multi-byte Support**: Helpers for sending and receiving 16-bit integers.
 - **Mock Environment**: Includes a C++ mock Arduino environment for local testing and development.
@@ -37,7 +38,12 @@ Sends a 16-bit integer as two consecutive packets of the same type.
 ```cpp
 bool receiveInt(byte& type, int& value);
 ```
-Attempts to receive a 16-bit integer. Includes a 50ms timeout for the second byte.
+Attempts to receive a 16-bit integer. It can handle interleaved packets of different types by caching them for subsequent `receivePacket` calls.
+
+```cpp
+bool available();
+```
+Returns `true` if there are cached packets or enough data in the serial stream to potentially form a packet.
 
 ## Testing Locally
 

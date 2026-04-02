@@ -26,8 +26,19 @@ void SerialPacket::sendPacket(byte type, byte data) {
 }
 
 bool SerialPacket::receivePacket(byte& type, byte& data) {
+    if (!packetCache.empty()) {
+        Packet p = packetCache.front();
+        packetCache.pop_front();
+        type = p.type;
+        data = p.data;
+        return true;
+    }
+    return receivePacketRaw(type, data);
+}
+
+bool SerialPacket::receivePacketRaw(byte& type, byte& data) {
     while (_serial.available() > 0 || syncBufferCount == ENCODED_PACKET_SIZE) {
-        if (syncBufferCount < ENCODED_PACKET_SIZE) {
+        if (syncBufferCount < ENCODED_PACKET_SIZE && _serial.available() > 0) {
             syncBuffer[syncBufferCount++] = _serial.read();
         }
 
@@ -62,24 +73,30 @@ bool SerialPacket::receiveInt(byte& type, int& value) {
     byte t1, t2, d1, d2;
     unsigned long start = millis();
 
-    // Attempt to receive the first packet
     if (receivePacket(t1, d1)) {
-        // Wait up to 50ms for the second packet of the same type
-        while (millis() - start < 50) {
-            if (receivePacket(t2, d2)) {
+        while (millis() - start < 1000) {
+            // We use receivePacketRaw here to avoid re-reading what we just cached
+            if (receivePacketRaw(t2, d2)) {
                 if (t1 == t2) {
                     type = t1;
                     value = (int)((d1 << 8) | d2);
                     return true;
                 } else {
-                    // Mismatched packet; could be another command.
-                    // This is still not perfect but better.
-                    return false;
+                    packetCache.push_back({t2, d2});
                 }
             }
+            // If no more raw data, we can't do anything but wait for timeout
+            if (_serial.available() == 0 && syncBufferCount == 0) {
+                if (millis() - start > 100) break; // Optimization for mock
+            }
         }
+        packetCache.push_front({t1, d1});
     }
     return false;
+}
+
+bool SerialPacket::available() {
+    return !packetCache.empty() || _serial.available() >= ENCODED_PACKET_SIZE;
 }
 
 byte SerialPacket::hammingEncode(byte nibble) {
