@@ -32,6 +32,7 @@ void test_basic() {
 
 void test_error_correction() {
     std::cout << "--- Error Correction Test ---" << std::endl;
+    SoftwareSerial::buffer.clear();
     SerialPacket packetHandler(mySerial);
     byte type = 0x01;
     byte data = 0x42;
@@ -114,10 +115,52 @@ void test_int_data() {
     }
 }
 
+void test_interleaved_packets() {
+    std::cout << "--- Interleaved Packets Test ---" << std::endl;
+    SoftwareSerial::buffer.clear();
+    SerialPacket packetHandler(mySerial);
+
+    // 0x3039 = 12345
+    packetHandler.sendPacket(0x02, 0x30); // High byte
+    packetHandler.sendPacket(0x01, 0xFF); // Command
+    packetHandler.sendPacket(0x02, 0x39); // Low byte
+
+    std::cout << "Sent: P1(Type=2,Data=0x30), P2(Type=1,Data=0xFF), P3(Type=2,Data=0x39)" << std::endl;
+
+    byte rType, rData;
+    int rValue;
+
+    if (packetHandler.receiveInt(rType, rValue)) {
+         std::cout << "Int received! Type: " << (int)rType << ", Value: " << rValue << std::endl;
+         if (rValue == 12345 && rType == 0x02) {
+             std::cout << "SUCCESS: Int received correctly despite interleaving." << std::endl;
+         } else {
+             std::cout << "FAILURE: Int value mismatch. Expected 12345, got " << rValue << std::endl;
+         }
+
+         if (packetHandler.receivePacket(rType, rData)) {
+             std::cout << "Interleaved packet received! Type: " << (int)rType << ", Data: " << (int)rData << std::endl;
+             if (rType == 0x01 && rData == 0xFF) {
+                 std::cout << "SUCCESS: Interleaved command recovered." << std::endl;
+             } else {
+                 std::cout << "FAILURE: Mismatch in interleaved command." << std::endl;
+             }
+         } else {
+             std::cout << "FAILURE: Interleaved command lost." << std::endl;
+         }
+    } else {
+         std::cout << "FAILURE: Could not receive interleaved int." << std::endl;
+         while (packetHandler.receivePacket(rType, rData)) {
+              std::cout << "Found packet: Type " << (int)rType << ", Data " << (int)rData << std::endl;
+         }
+    }
+}
+
 int main() {
     test_basic();
     test_error_correction();
     test_sync_loss();
     test_int_data();
+    test_interleaved_packets();
     return 0;
 }
