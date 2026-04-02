@@ -1,14 +1,43 @@
 
 #include "SerialPacket.h"
 
-#define RAW_PACKET_SIZE 3
-
 const byte errorCorrectionTable[] PROGMEM = {
     0x00, 0x08, 0x20, 0x02, 0x40, 0x04, 0x10, 0x01
 };
 
-SerialPacket::SerialPacket(Stream& stream) : _serial(stream), syncBufferCount(0) {
+SerialPacket::SerialPacket(Stream& stream)
+    : _serial(stream), syncBufferCount(0), cacheHead(0), cacheTail(0), cacheCount(0) {
     memset(syncBuffer, 0, sizeof(syncBuffer));
+}
+
+void SerialPacket::pushCache(Packet p) {
+    if (cacheCount < PACKET_CACHE_SIZE) {
+        packetCache[cacheTail] = p;
+        cacheTail = (cacheTail + 1) % PACKET_CACHE_SIZE;
+        cacheCount++;
+    }
+}
+
+void SerialPacket::pushFrontCache(Packet p) {
+    if (cacheCount < PACKET_CACHE_SIZE) {
+        cacheHead = (cacheHead - 1 + PACKET_CACHE_SIZE) % PACKET_CACHE_SIZE;
+        packetCache[cacheHead] = p;
+        cacheCount++;
+    }
+}
+
+Packet SerialPacket::popCache() {
+    Packet p = {0, 0};
+    if (cacheCount > 0) {
+        p = packetCache[cacheHead];
+        cacheHead = (cacheHead + 1) % PACKET_CACHE_SIZE;
+        cacheCount--;
+    }
+    return p;
+}
+
+bool SerialPacket::isCacheEmpty() {
+    return cacheCount == 0;
 }
 
 void SerialPacket::sendPacket(byte type, byte data) {
@@ -26,9 +55,8 @@ void SerialPacket::sendPacket(byte type, byte data) {
 }
 
 bool SerialPacket::receivePacket(byte& type, byte& data) {
-    if (!packetCache.empty()) {
-        Packet p = packetCache.front();
-        packetCache.pop_front();
+    if (!isCacheEmpty()) {
+        Packet p = popCache();
         type = p.type;
         data = p.data;
         return true;
@@ -70,33 +98,108 @@ void SerialPacket::sendInt(byte type, int value) {
 }
 
 bool SerialPacket::receiveInt(byte& type, int& value) {
-    byte t1, t2, d1, d2;
+    byte t1, d1, t2, d2;
     unsigned long start = millis();
-
     if (receivePacket(t1, d1)) {
         while (millis() - start < 1000) {
-            // We use receivePacketRaw here to avoid re-reading what we just cached
-            if (receivePacketRaw(t2, d2)) {
+            if (receivePacket(t2, d2)) {
                 if (t1 == t2) {
                     type = t1;
-                    value = (int)((d1 << 8) | d2);
+                    value = (int)((uint16_t)(d1 << 8) | d2);
                     return true;
                 } else {
-                    packetCache.push_back({t2, d2});
+                    pushCache({t2, d2});
                 }
             }
-            // If no more raw data, we can't do anything but wait for timeout
-            if (_serial.available() == 0 && syncBufferCount == 0) {
-                if (millis() - start > 100) break; // Optimization for mock
+        }
+        pushFrontCache({t1, d1});
+    }
+    return false;
+}
+
+void SerialPacket::sendLong(byte type, long value) {
+    sendPacket(type, (byte)((value >> 24) & 0xFF));
+    sendPacket(type, (byte)((value >> 16) & 0xFF));
+    sendPacket(type, (byte)((value >> 8) & 0xFF));
+    sendPacket(type, (byte)(value & 0xFF));
+}
+
+bool SerialPacket::receiveLong(byte& type, long& value) {
+    byte t1, t2, d1, d2;
+    byte dat[4];
+    int count = 0;
+    unsigned long start = millis();
+    if (receivePacket(t1, d1)) {
+        dat[0] = d1;
+        count = 1;
+        while (millis() - start < 1000 && count < 4) {
+            if (receivePacket(t2, d2)) {
+                if (t1 == t2) {
+                    dat[count++] = d2;
+                } else {
+                    pushCache({t2, d2});
+                }
             }
         }
-        packetCache.push_front({t1, d1});
+        if (count == 4) {
+            type = t1;
+            value = ((long)dat[0] << 24) | ((long)dat[1] << 16) | ((long)dat[2] << 8) | (long)dat[3];
+            return true;
+        } else {
+            for (int i = count - 1; i >= 0; i--) {
+                pushFrontCache({t1, dat[i]});
+            }
+        }
+    }
+    return false;
+}
+
+void SerialPacket::sendFloat(byte type, float value) {
+    union { float f; byte b[4]; } d;
+    d.f = value;
+    sendPacket(type, d.b[3]);
+    sendPacket(type, d.b[2]);
+    sendPacket(type, d.b[1]);
+    sendPacket(type, d.b[0]);
+}
+
+bool SerialPacket::receiveFloat(byte& type, float& value) {
+    byte t1, t2, d1, d2;
+    byte dat[4];
+    int count = 0;
+    unsigned long start = millis();
+    if (receivePacket(t1, d1)) {
+        dat[0] = d1;
+        count = 1;
+        while (millis() - start < 1000 && count < 4) {
+            if (receivePacket(t2, d2)) {
+                if (t1 == t2) {
+                    dat[count++] = d2;
+                } else {
+                    pushCache({t2, d2});
+                }
+            }
+        }
+        if (count == 4) {
+            type = t1;
+            union { float f; byte b[4]; } conv;
+            conv.b[3] = dat[0];
+            conv.b[2] = dat[1];
+            conv.b[1] = dat[2];
+            conv.b[0] = dat[3];
+            value = conv.f;
+            return true;
+        } else {
+            for (int i = count - 1; i >= 0; i--) {
+                pushFrontCache({t1, dat[i]});
+            }
+        }
     }
     return false;
 }
 
 bool SerialPacket::available() {
-    return !packetCache.empty() || _serial.available() >= ENCODED_PACKET_SIZE;
+    return !isCacheEmpty() || _serial.available() >= ENCODED_PACKET_SIZE;
 }
 
 byte SerialPacket::hammingEncode(byte nibble) {
@@ -111,23 +214,13 @@ byte SerialPacket::hammingEncode(byte nibble) {
 }
 
 byte SerialPacket::hammingDecode(byte b) {
-    byte p1 = (b >> 6) & 0x01;
-    byte p2 = (b >> 5) & 0x01;
-    byte d1 = (b >> 4) & 0x01;
-    byte p3 = (b >> 3) & 0x01;
-    byte d2 = (b >> 2) & 0x01;
-    byte d3 = (b >> 1) & 0x01;
-    byte d4 = b & 0x01;
-    byte s1 = p1 ^ d1 ^ d2 ^ d4;
-    byte s2 = p2 ^ d1 ^ d3 ^ d4;
-    byte s3 = p3 ^ d2 ^ d3 ^ d4;
+    byte p1 = (b >> 6) & 0x01, p2 = (b >> 5) & 0x01, d1 = (b >> 4) & 0x01;
+    byte p3 = (b >> 3) & 0x01, d2 = (b >> 2) & 0x01, d3 = (b >> 1) & 0x01, d4 = b & 0x01;
+    byte s1 = p1 ^ d1 ^ d2 ^ d4, s2 = p2 ^ d1 ^ d3 ^ d4, s3 = p3 ^ d2 ^ d3 ^ d4;
     byte syndrome = (s1 << 2) | (s2 << 1) | s3;
     if (syndrome != 0) {
         b ^= pgm_read_byte(&errorCorrectionTable[syndrome]);
-        d1 = (b >> 4) & 0x01;
-        d2 = (b >> 2) & 0x01;
-        d3 = (b >> 1) & 0x01;
-        d4 = b & 0x01;
+        d1 = (b >> 4) & 0x01; d2 = (b >> 2) & 0x01; d3 = (b >> 1) & 0x01; d4 = b & 0x01;
     }
     return (d1 << 3) | (d2 << 2) | (d3 << 1) | d4;
 }

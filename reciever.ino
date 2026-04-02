@@ -32,31 +32,24 @@ void setup() {
 
 // Loop function
 void loop() {
-  // Define variables for storing the packet type and data
+  // Try to receive telemetry as long
   byte packetType;
-  byte packetData;
+  long longValue;
+  if (serialPacket.receiveLong(packetType, longValue)) {
+      if (packetType == DATA_PACKET) {
+          Serial.print("Received telemetry (long): ");
+          Serial.println((int)longValue);
+      }
+  }
 
-  // Try to receive a packet from the sender
-  bool success = serialPacket.receivePacket(packetType, packetData);
-
-  // Check if the packet was received successfully
-  if (success) {
-    // Print a message to the serial monitor
-    Serial.print("Received packet: ");
-    Serial.print(packetType == COMMAND_PACKET ? "COMMAND" : "DATA");
-    Serial.print(" ");
-    Serial.println(packetData);
-
-    // Check the packet type and act accordingly
-    if (packetType == COMMAND_PACKET) {
-      // The packet is a command, toggle the LED according to the data
-      digitalWrite(LED_PIN, packetData == LED_ON ? HIGH : LOW);
-    }
-    else if (packetType == DATA_PACKET) {
-      // The packet is data, do something with it (e.g. display it on an LCD)
-      // For simplicity, we just print it to the serial monitor
-      Serial.print("Telemetry data: ");
-      Serial.println(packetData);
-    }
+  // Try to receive command
+  byte cmdType;
+  byte cmdData;
+  if (serialPacket.receivePacket(cmdType, cmdData)) {
+      if (cmdType == COMMAND_PACKET) {
+          Serial.print("Received command: ");
+          Serial.println(cmdData == LED_ON ? "LED ON" : "LED OFF");
+          digitalWrite(LED_PIN, cmdData == LED_ON ? HIGH : LOW);
+      }
   }
 }

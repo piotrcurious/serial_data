@@ -25,7 +25,7 @@ SerialPacket serialPacket(mySerial);
 bool ledState = false;
 
 // Define a variable for storing the telemetry data
-int telemetryData = 0;
+long telemetryData = 0;
 
 // Setup function
 void setup() {
@@ -53,12 +53,12 @@ void loop() {
   // Increment the telemetry data by a random value
   telemetryData += random(10, 100);
 
-  // Send a data packet with the telemetry data
-  serialPacket.sendPacket(DATA_PACKET, (byte)(telemetryData & 0xFF));
+  // Send a data packet with the telemetry data as a LONG
+  serialPacket.sendLong(DATA_PACKET, telemetryData);
 
   // Print a message to the serial monitor
-  Serial.print("Sent data: ");
-  Serial.println(telemetryData);
+  Serial.print("Sent telemetry (long): ");
+  Serial.println((int)telemetryData);
 
   // Wait for one second
   delay(1000);

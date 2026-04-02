@@ -6,9 +6,9 @@ A robust Arduino library for serial data communication with Hamming(7,4) error c
 
 - **Error Correction**: Uses Hamming(7,4) code to detect and correct single-bit errors in every nibble.
 - **Packet Synchronization**: Automatically recovers from stream offsets using a sliding-window buffer.
-- **Interleaved Packet Support**: Handled via an internal packet cache, allowing multi-byte data (like `int`) to be received even if other packets are interleaved.
+- **Interleaved Packet Support**: Handled via an internal packet cache, allowing multi-byte data (like `int`, `long`, `float`) to be received even if other packets are interleaved.
 - **Dependency Injection**: Works with any `Stream` implementation (HardwareSerial, SoftwareSerial, etc.).
-- **Multi-byte Support**: Helpers for sending and receiving 16-bit integers.
+- **Multi-type Support**: Helpers for sending and receiving `int` (16-bit), `long` (32-bit), and `float` (32-bit).
 - **Mock Environment**: Includes a C++ mock Arduino environment for local testing and development.
 
 ## API
@@ -19,31 +19,27 @@ SerialPacket(Stream& stream);
 ```
 Initializes the library with a serial stream.
 
-### Methods
+### Basic Methods
 ```cpp
 void sendPacket(byte type, byte data);
-```
-Sends a single-byte data packet with a specified type.
-
-```cpp
 bool receivePacket(byte& type, byte& data);
-```
-Attempts to receive a single-byte data packet. Returns `true` if a valid packet was successfully decoded.
-
-```cpp
-void sendInt(byte type, int value);
-```
-Sends a 16-bit integer as two consecutive packets of the same type.
-
-```cpp
-bool receiveInt(byte& type, int& value);
-```
-Attempts to receive a 16-bit integer. It can handle interleaved packets of different types by caching them for subsequent `receivePacket` calls.
-
-```cpp
 bool available();
 ```
-Returns `true` if there are cached packets or enough data in the serial stream to potentially form a packet.
+
+### Multi-byte Methods
+```cpp
+// 16-bit Integer
+void sendInt(byte type, int value);
+bool receiveInt(byte& type, int& value);
+
+// 32-bit Long
+void sendLong(byte type, long value);
+bool receiveLong(byte& type, long& value);
+
+// 32-bit Float
+void sendFloat(byte type, float value);
+bool receiveFloat(byte& type, float& value);
+```
 
 ## Testing Locally
 
@@ -65,4 +61,4 @@ Each byte of raw data (including the type and a XOR checksum) is split into two 
 - **Raw Packet**: `[Type] [Data] [Checksum (Type ^ Data)]` (3 bytes)
 - **Encoded Packet**: 6 bytes (2 bytes per raw byte)
 
-The synchronization logic in `receivePacket` scans the incoming stream byte-by-byte until a valid 6-byte sequence passing the Hamming decoding and checksum is found.
+The synchronization logic in `receivePacket` scans the incoming stream byte-by-byte until a valid 6-byte sequence passing the Hamming decoding and checksum is found. Multi-byte types are sent as a series of single-byte packets of the same `type`.
