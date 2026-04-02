@@ -3,9 +3,10 @@
 #define SerialPacket_h
 
 #include <Arduino.h>
-#include <deque>
 
+#define RAW_PACKET_SIZE 3
 #define ENCODED_PACKET_SIZE 6
+#define PACKET_CACHE_SIZE 8
 
 struct Packet {
     byte type;
@@ -14,16 +15,19 @@ struct Packet {
 
 class SerialPacket {
   public:
-    // Take a Stream reference to allow any serial interface
     SerialPacket(Stream& stream);
     void sendPacket(byte type, byte data);
     bool receivePacket(byte& type, byte& data);
 
-    // Helpers for multi-byte data
     void sendInt(byte type, int value);
     bool receiveInt(byte& type, int& value);
 
-    // Returns true if enough bytes are available for at least one encoded packet
+    void sendLong(byte type, long value);
+    bool receiveLong(byte& type, long& value);
+
+    void sendFloat(byte type, float value);
+    bool receiveFloat(byte& type, float& value);
+
     bool available();
 
   private:
@@ -34,10 +38,17 @@ class SerialPacket {
     byte syncBuffer[ENCODED_PACKET_SIZE];
     int syncBufferCount;
 
-    // A small queue for packets to allow look-ahead/interleaving handling
-    std::deque<Packet> packetCache;
+    // Fixed-size circular buffer for packet caching
+    Packet packetCache[PACKET_CACHE_SIZE];
+    int cacheHead;
+    int cacheTail;
+    int cacheCount;
 
-    // Internal raw receive (no cache)
+    void pushCache(Packet p);
+    void pushFrontCache(Packet p);
+    Packet popCache();
+    bool isCacheEmpty();
+
     bool receivePacketRaw(byte& type, byte& data);
 };
 
